@@ -1,0 +1,45 @@
+# ===========================================================================
+#  RianniTech starter template — Apache config.
+#  Gives every new site the security headers, HTTPS, caching, compression,
+#  and 404 page that SiteCheck looks for. Most shared/Apache hosts support this.
+# ===========================================================================
+
+# --- Force HTTPS + non-www -> www (edit to taste) ---
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# --- Custom error page ---
+ErrorDocument 404 /404.html
+
+# --- Security headers ---
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=15552000"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  # A starter CSP — loosen the script/style/font sources to match what the site actually uses.
+  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+  Header unset X-Powered-By
+  Header unset Server
+</IfModule>
+
+# --- Compression ---
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# --- Caching for static assets ---
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType text/html "access plus 1 hour"
+</IfModule>
