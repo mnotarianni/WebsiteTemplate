@@ -109,7 +109,7 @@ function normalizeUrl(raw) {
 // ---------------- DNS over HTTPS ----------------
 async function doh(name, type) {
   try {
-    const r = await fetch("https://1.1.1.1/dns-query?name=" + encodeURIComponent(name) + "&type=" + type, { headers: { accept: "application/dns-json" } });
+    const r = await fetch("https://1.1.1.1/dns-query?name=" + encodeURIComponent(name) + "&type=" + type, { headers: { accept: "application/dns-json" }, signal: AbortSignal.timeout(5000) });
     const j = await r.json();
     return (j.Answer || []).map(a => String(a.data || "").replace(/^"|"$/g, "").replace(/" "/g, ""));
   } catch (e) { return []; }
@@ -128,7 +128,7 @@ async function runScan(url) {
   let headers = {}, html = "", finalUrl = url, status = 0, timing = 0, fetchErr = null;
   try {
     const t0 = Date.now();
-    const resp = await fetch(url, { redirect: "follow", headers: { "User-Agent": "RianniTech-SiteCheck/1.0 (+https://riannitech.com)" } });
+    const resp = await fetch(url, { redirect: "follow", headers: { "User-Agent": "RianniTech-SiteCheck/1.0 (+https://riannitech.com)" }, signal: AbortSignal.timeout(12000) });
     timing = Date.now() - t0; status = resp.status; finalUrl = resp.url || url;
     resp.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     if ((headers["content-type"] || "").includes("text/html")) { const buf = await resp.arrayBuffer(); html = new TextDecoder("utf-8", { fatal: false }).decode(buf.slice(0, 2500000)); }
@@ -143,7 +143,7 @@ async function runScan(url) {
 
     // http -> https redirect
     try {
-      const httpResp = await fetch("http://" + domain, { redirect: "manual" });
+      const httpResp = await fetch("http://" + domain, { redirect: "manual", signal: AbortSignal.timeout(6000) });
       const loc = httpResp.headers.get("location") || "";
       const redirects = (httpResp.status >= 300 && httpResp.status < 400 && loc.startsWith("https://"));
       add("Security", "HTTP redirects to HTTPS", redirects ? "pass" : "warn", redirects ? loc : "status " + httpResp.status, redirects ? "" : "Add a 301 redirect from http:// to https://.");
@@ -185,8 +185,8 @@ async function runScan(url) {
     // robots + sitemap (parallel)
     try {
       const [robots, sitemap] = await Promise.all([
-        fetch(u.origin + "/robots.txt").then(r => r.ok).catch(() => false),
-        fetch(u.origin + "/sitemap.xml").then(r => r.ok).catch(() => false)
+        fetch(u.origin + "/robots.txt", { signal: AbortSignal.timeout(6000) }).then(r => r.ok).catch(() => false),
+        fetch(u.origin + "/sitemap.xml", { signal: AbortSignal.timeout(6000) }).then(r => r.ok).catch(() => false)
       ]);
       add("SEO", "robots.txt", robots ? "pass" : "warn", robots ? "found" : "missing", robots ? "" : "Add a /robots.txt.");
       add("SEO", "sitemap.xml", sitemap ? "pass" : "warn", sitemap ? "found" : "missing", sitemap ? "" : "Add a /sitemap.xml and reference it in robots.txt.");
