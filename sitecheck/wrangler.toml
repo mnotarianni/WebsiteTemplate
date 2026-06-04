@@ -1,0 +1,14 @@
+# Worker name must match the Worker you create in the dashboard.
+name = "sitecheck"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Static UI in /public; the Worker handles /api/* and runs the audits.
+[assets]
+directory = "./public"
+
+# D1 database. Paste your database's ID (D1 -> sitecheck -> "Database ID").
+[[d1_databases]]
+binding = "DB"
+database_name = "sitecheck"
+database_id = "PASTE_DATABASE_ID_HERE"

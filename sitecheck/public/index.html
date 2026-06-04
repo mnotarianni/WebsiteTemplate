@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RianniTech SiteCheck</title>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <span class="logo">R</span>
+    <div><h1>SiteCheck</h1><p>Website health audits · RianniTech</p></div>
+  </div>
+
+  <div class="card">
+    <h2>Scan a site</h2>
+    <div class="scanbar">
+      <input id="scanUrl" placeholder="example.com  or  https://example.com" onkeydown="if(event.key==='Enter')scanAdhoc()">
+      <button class="primary" onclick="scanAdhoc()">Scan</button>
+    </div>
+    <p class="muted" style="margin:10px 0 0">Passive checks only — security headers, HTTPS, SEO, performance, DNS &amp; email. Takes a few seconds.</p>
+  </div>
+
+  <div id="report"></div>
+
+  <div class="card">
+    <h2>Your sites</h2>
+    <div class="addrow">
+      <input id="siteLabel" placeholder="Label (optional)">
+      <input id="siteUrl" placeholder="example.com" onkeydown="if(event.key==='Enter')addSite()">
+      <button onclick="addSite()">Add</button>
+    </div>
+    <div id="sites"><p class="muted" style="margin:0">Loading…</p></div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+<script src="/assets/app.js"></script>
+</body>
+</html>
