@@ -118,21 +118,28 @@ async function doh(name, type) {
 // ---------------- the audit ----------------
 function gradeOf(score) { return score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F"; }
 
+async function fetchPage(target) {
+  try {
+    const t0 = Date.now();
+    const resp = await fetch(target, { redirect: "follow", headers: { "User-Agent": "RianniTech-SiteCheck/1.0 (+https://riannitech.com)" }, signal: AbortSignal.timeout(12000) });
+    const timing = Date.now() - t0;
+    const headers = {}; resp.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+    let html = "";
+    if ((headers["content-type"] || "").includes("text/html")) { const buf = await resp.arrayBuffer(); html = new TextDecoder("utf-8", { fatal: false }).decode(buf.slice(0, 2500000)); }
+    return { ok: true, headers, html, finalUrl: resp.url || target, status: resp.status, timing };
+  } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
+}
+
 async function runScan(url) {
   const u = new URL(url);
   const domain = u.hostname;
   const checks = [];
   const add = (cat, label, status, detail, fix) => checks.push({ cat, label, status, detail: detail || "", fix: fix || "" });
 
-  // --- fetch the page (follow redirects) ---
-  let headers = {}, html = "", finalUrl = url, status = 0, timing = 0, fetchErr = null;
-  try {
-    const t0 = Date.now();
-    const resp = await fetch(url, { redirect: "follow", headers: { "User-Agent": "RianniTech-SiteCheck/1.0 (+https://riannitech.com)" }, signal: AbortSignal.timeout(12000) });
-    timing = Date.now() - t0; status = resp.status; finalUrl = resp.url || url;
-    resp.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    if ((headers["content-type"] || "").includes("text/html")) { const buf = await resp.arrayBuffer(); html = new TextDecoder("utf-8", { fatal: false }).decode(buf.slice(0, 2500000)); }
-  } catch (e) { fetchErr = String((e && e.message) || e); }
+  // --- fetch the page (with http fallback so http-only sites aren't reported "unreachable") ---
+  let page = await fetchPage(url);
+  if (!page.ok && url.startsWith("https://")) { const alt = await fetchPage("http://" + u.host + u.pathname + u.search); if (alt.ok) page = alt; }
+  const headers = page.headers || {}, html = page.html || "", finalUrl = page.finalUrl || url, status = page.status || 0, timing = page.timing || 0, fetchErr = page.ok ? null : page.err;
 
   if (fetchErr) {
     add("Availability", "Site reachable", "fail", "Couldn't load the site: " + fetchErr, "Confirm the site is online and the URL/DNS is correct.");
@@ -163,7 +170,7 @@ async function runScan(url) {
 
     // mixed content (http resources on an https page)
     if (https && html) {
-      const mixed = /(?:src|href)\s*=\s*["']http:\/\//i.test(html);
+      const mixed = /\bsrc\s*=\s*["']http:\/\//i.test(html);
       add("Security", "No mixed content", mixed ? "fail" : "pass", mixed ? "http:// resources found on an https page" : "clean", mixed ? "Load all resources over https://." : "");
     }
 
@@ -180,6 +187,15 @@ async function runScan(url) {
       add("SEO", "Single H1", h1s === 1 ? "pass" : "warn", h1s + " found", h1s === 1 ? "" : (h1s === 0 ? "Add one <h1> heading." : "Use exactly one <h1>."));
       add("SEO", "Social preview (Open Graph)", /<meta[^>]+property=["']og:(title|image)["']/i.test(html) ? "pass" : "warn", "", /og:/i.test(html) ? "" : "Add og:title and og:image for nicer link previews.");
       add("SEO", "Favicon", /<link[^>]+rel=["'][^"']*icon/i.test(html) ? "pass" : "warn", "", /icon/i.test(html) ? "" : "Add a favicon.");
+      add("SEO", "Structured data (Schema.org)", /<script[^>]+type=["']application\/ld\+json["']/i.test(html) ? "pass" : "warn", "", /ld\+json/i.test(html) ? "" : "Add JSON-LD (LocalBusiness/Organization) — big for local Google results & rich snippets.");
+
+      // --- accessibility ---
+      const imgs = html.match(/<img\b[^>]*>/gi) || [];
+      const noAlt = imgs.filter(t => !/\balt\s*=/i.test(t)).length;
+      add("Accessibility", "Image alt text", imgs.length === 0 ? "pass" : (noAlt === 0 ? "pass" : noAlt <= 2 ? "warn" : "fail"), noAlt + " of " + imgs.length + " images missing alt", noAlt ? "Add descriptive alt text to every <img> (screen readers + image SEO)." : "");
+      const vp = (html.match(/<meta[^>]+name=["']viewport["'][^>]+content=["']([^"']*)["']/i) || [])[1] || "";
+      const noZoom = /user-scalable\s*=\s*no|maximum-scale\s*=\s*1(\.0)?\b/i.test(vp);
+      add("Accessibility", "Pinch-zoom allowed", noZoom ? "warn" : "pass", noZoom ? "zoom disabled" : "ok", noZoom ? "Remove user-scalable=no / maximum-scale=1 — disabling zoom is an a11y barrier." : "");
     }
 
     // robots + sitemap (parallel)
@@ -190,6 +206,12 @@ async function runScan(url) {
       ]);
       add("SEO", "robots.txt", robots ? "pass" : "warn", robots ? "found" : "missing", robots ? "" : "Add a /robots.txt.");
       add("SEO", "sitemap.xml", sitemap ? "pass" : "warn", sitemap ? "found" : "missing", sitemap ? "" : "Add a /sitemap.xml and reference it in robots.txt.");
+    } catch (e) { /* ignore */ }
+
+    // proper 404 (soft-404 detection)
+    try {
+      const r404 = await fetch(u.origin + "/sitecheck-missing-" + Date.now(), { redirect: "manual", signal: AbortSignal.timeout(6000) });
+      add("SEO", "Proper 404 for missing pages", r404.status === 404 ? "pass" : "warn", "missing URL returned HTTP " + r404.status, r404.status === 404 ? "" : "Missing pages should return 404, not " + r404.status + " — soft-404s confuse Google.");
     } catch (e) { /* ignore */ }
 
     // --- performance-lite ---
